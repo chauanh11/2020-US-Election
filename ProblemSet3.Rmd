@@ -1,0 +1,191 @@
+---
+title: "A Prediction of the 2020 US Presidential Election"
+author: "Annie Chau"
+date: "November 2, 2020"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggplot2)
+
+# Loading in the cleaned survey Data
+survey_data <- read_csv("/Users/anhhc/Desktop/PS3/outputs/survey_data.csv")
+
+# Loading in the cleaned census Data
+census_data <- read_csv("/Users/anhhc/Desktop/PS3/outputs/census_data.csv")
+
+```
+
+## Model
+
+Using post-stratification methods and a linear regression model on the age, gender, race, level of education, and total household income of US voters, this analysis is an attempt to predict the result of the 2020 US Presidential Election based on the collaborated dataset from Voter Study Group and UCLA Nationscale (Tausanovitch, 2020) and the demographic dataset provided by IPUMS (Ruggles, 2020). A linear regression model was chosen since it is an efficient way to get a quick snapshot of which variables are significant in determining who voters are likely to lean towards. This model will particularly focus on predicting whether Donald will win the popular vote in the 2020 US Election.
+
+### Model Specifics
+
+In this logistic linear regression model, the variables of interest are age, gender, race, education, and household income which, respectively, are represented by $\beta_1, \beta_2, \beta_3, \beta_4$, and $\beta_5$. All variables are categorical, age, gender, race, education, and household income were all grouped into subcategories such as age range from 18 to 24; none of the variables is numeric. The state of residence was removed from the model since many states were not significant. The remaining variables were used for the model because they were all significant to at least 0.1, removing them decreased $R^2_{adj}$ which means a more inaccurate prediction.
+
+The following concised model will be used to predict the proportion of eligible voters who will vote for Donald Trump.
+
+$$ y = \beta_0+ \beta_1  x_{age} + \beta_2  x_{gend}+ \beta_3  x_{race}+ \beta_4  x_{educ} + \beta_5  x_{incm} + \epsilon$$
+
+In this model, $\beta_i$ represents the slope the linear function of $x_i$ vs. $y$, the likelihood of voting for Donald Trump.
+
+* $y$ represents the likelihood that a particular individual will vote for Donald Trump.
+* $\beta_0$ is the y-intercept term, it represents the likelihood of voting for Donald Trump when all the other variables are nulled (i.e. for each $\beta_i, x_i = 0$).
+* $\beta_1$ represents the value that y increases or decreases by when the age range of an individual increase by one unit (i.e. from 18-23 to 24-29).
+* $\beta_2$ represents the change in y (the likelihood of voting for Trump) when gender is male or is female.
+* $\beta_3$ represents the change in y when a person's race is White, Black, Asian, Native American, or other.
+* $\beta_4$ represents the value that y changes by for different levels of education.
+* $\beta_5$ represents the change in y given an individual's income range (i.e. \$50,000 to \$99,999).
+* $\epsilon$ is the error term, it represents possible errors unaccounted for by $\beta_i$ in determining who an individual will vote for.
+* $\beta_i$ for $i = 1, 2,...,5$ are split into subcategories $\beta_{ij}$ where each j represents a different subcategory. If an individual does not fall into a particular subcategory (i.e. household income is not more than 249,999) then the $x_{ij}$ value is equal to zero.
+  + $\beta_1$ is split into age groups 18-23, 24-29, 30-39, 40-49, 50-59, 60-69, 70+.
+  + $\beta_2$ is split into gender male or female (i.e. for $\beta_21$, $x_21$ represents male)
+  + $\beta_3$ is divided into White, Black, Asian, Native American, or other.
+  + $\beta_4$ is divided into No high school diploma, High school diploma, Some post-secondary, Associate's degree, Bachelor's degree, and Graduate Degree.
+  + $\beta_5$ is divided into 4 income ranges: Less than 50,000; 50,000-99,999; 100,000-249,999; and More than 249,999. 
+
+```{r, include=FALSE}
+
+# Creating the Model
+model <- lm(vote_trump ~ age + gender + race_ethnicity + education + household_income, 
+            data=survey_data, family= "binomial")
+
+# Model Results (to Report in Results section)
+summary(model)
+```
+
+## Post-Stratification 
+
+Using post-stratification methods on the location (state), age, sex, race, education, and total income of US voters, this analysis is an attempt to predict the results of the upcoming US election. Post-stratification enables an analysis based on weighted demographic subcategories and therefore, yield a more accurate prediction. In post-stratification, the population is divided into cells (subcategories of variables such as gender male, gender female, or age 18-25), an estimation is then made for each subcategory before it is weighted by the population size of the cell (total number of observations in a cell) and summed against the total population size. 
+
+In this particular analysis, the cells are split into age range (from 18 since minors are not eligible to vote), gender, race, level of education levels, and total household income. A person's age, gender, race, education, and household finance status determines their political ideology, and therefore, these variables determine how likely an individual is to vote for Donald Trump. Analyses of the 2016 Presidential Election found that Republican supports are likely to be male, Caucasian, and middle-aged while Democratic supporters are likely to be young, highly educated white-collars (Pew Research Centre, 2018), thus, the cells are split as indicated to ensure that each demographical category is accurately weighted for the analysis. Additionally, career outlooks and personal finances in the next four years are greatly impacted by the election, therefore, subcategories of the labour force and total personal income are shall be included.
+
+```{r, include=FALSE}
+
+# Here I will perform the post-stratification calculation
+census_data$estimate <-
+  model %>%
+  predict(newdata = census_data)
+
+census_data %>%
+  mutate(alp_predict_prop = estimate*n) %>%
+  summarise(alp_predict = sum(alp_predict_prop)/sum(n))
+```
+
+# Results
+```{r, echo=FALSE}
+# Summing all y, excluding 'NA's (4745725)
+toty <- sum(census_data$estimate, na.rm=T)
+# Count number of NA's (28620)
+tot_na <- sum(is.na(census_data$estimate))
+# Total number of observations - number of NA = 11187327 - 28620 = 11158707
+# Creating numerator column for y_st equation, multiplying by bin size
+census_data <- census_data %>% 
+  mutate(numerat = n * estimate)
+# Summing bins (totnum = 5095197.636)
+totnum <- sum(census_data$numerat, na.rm=T)
+# calculating y_st (0.4566118)
+y_st <- totnum/11158707
+```
+Using post-stratification methods, $\hat{y_{st}}$ is calculated to be 0.4566118 which means that an estimated 45.66% of all voters will vote for Donald Trump.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Graphing number of eligible voters' education level and gender
+qplot(education, 
+      data = census_data, 
+      fill = sex, 
+      xlab="Level of Education", 
+      ylab = "Number of Individuals",
+      main = "Figure 1. Level of Education and Gender of Eligible Voters") + coord_flip()
+```
+Figure 1. indicates that the majority of the US population has a high school diploma and completed some post-secondary schooling. There is no obvious gender imbalance between the different levels of education.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# graphing race and range of income of voters
+qplot(household_income, 
+      data = census_data, 
+      fill = race_ethnicity, 
+      xlab="Total Household Income", 
+      ylab = "Number of Individuals", 
+      main = "Figure 2. Household Income and Race of eligible voters") + coord_flip()
+
+```
+Figure 2. shows that the majority of US households earn less than \$50,000 a year. A small minority make more than $249,999 a year.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Make plot for different age and how likely they are to vote for trump
+qplot(vote_trump, 
+      data = survey_data, 
+      fill = household_income, 
+      binwidth = 0.5, 
+      xlab="Vote Trump", 
+      ylab = "Number of Individuals", 
+      main = "Figure 3. Household Income vs. Likelihood of voting for Donald Trump")
+
+```
+Figure 3. shows that the majority of participants in the Voter Study Group census indicated that they will not be voting for Donald Trump. Households with a total income of less than \$100,000 are less likely to vote for Donald Trump. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Plot for gender vs vote Trump 
+qplot(vote_trump, 
+      data = survey_data, 
+      fill = gender, 
+      binwidth = 0.5,
+      xlab = "Vote Trump", 
+      ylab = "Number of Individuals", 
+      main = "Figure 4. Gender vs. Likelihood of voting for Donald Trump")
+```
+Figure 4. shows that women are less likely to support Donald Trump. Over half of the Trump supporters are male. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Plot race vs vote Trump
+qplot(vote_trump, 
+      data = survey_data, 
+      fill = race_ethnicity, 
+      binwidth = 0.5,
+      xlab = "Vote Trump",
+      ylab = "Number of Individuals", 
+      main = "Figure 5. Race vs. Likelihood of voting for Donald Trump")
+```
+Figure 5. indicates that people of colour are less likely to support Donald Trump. Although the majority of voters, supporting Trump or not, are white, the proportion of people of colour voting for Donald Trump is minuscule.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+# Education vs. Vote Trump
+qplot(vote_trump, 
+      data = survey_data, 
+      fill = education, 
+      binwidth = 0.5, 
+      xlab="Vote Trump", 
+      ylab = "Number of Individuals",
+      main = "Figure 6. Education vs. Vote Trump")
+```
+Figure 6. indicated that education is not an influential factor in likelihood of supporting Trump. There is no level of education that is particularly in favour of Donald Trump.
+
+# Discussion
+
+For this analysis, a linear regression model was developed to predict an individual's likelihood of voting for Donald Trump. This model was, then, used in a post-stratification application to predict the overall population's likelihood of voting for Trump at the 2020 US Election. A calculation based on the post-stratification estimates showed that Donald Trump will be supported by 45.66% of US voters. These voters are likely to be Caucasian males with a high household income.
+
+Although the Republican Party is projected to have less than 50% of America's votes, it can't be concluded that they will lose. The remaining proportion of votes (54.34%) are split between all the other candidates. Joe Biden is likely to have the other popular vote, however, it is unclear whether he has more than 45.66% of the American votes. That being said, Trump is unlikely to have the popular vote of US citizens since the majority of voters are in the lower-income range ($50,000 or less) and they are less likely to vote Republican.
+
+## Weaknesses & Next Steps
+
+Like any other study, this one has many weaknesses. The dataset provided by Voter Study Group is a survey which means that participants may falsely claim who they support. The sample space is considerartely small, it only includes 6479 observations and this may not be an accurate representation of the entire US population. Additionally, participants who claimed that they will vote may not vote while participants who claimed they will not vote may vote, this will drive down the accuracy of the model. If 56% of the census population claim to support Joe Biden while only 45% actually votes, this could drastically alter the outcome.
+
+The chosen model only estimates the proportion of voters that will vote for Donald Trump. Since less than 50% of voters are in favour of Trump, there is no clear indication on who will win the election since the other proportion of votes represents all the remaining candidates. In our case, it is obvious that Joe Biden has the other popular vote, however, it is still unclear whether Biden has more votes than Trump. To get a clearer answer, another model is needed for the proportion of the population that supports Joe Biden.
+
+The linear regression model used for this prediction is not perfect considering that $R^2$ is only 0.1015; this is an indication that this model does a very poor job at predicting the true outcome since it is only accurate 10.15% of the time. In the future, the demographic of Republican and Democratic voters should be further analyzed in order to gauge significant variables. Knowing which variable is significant allows us to include influential factors and remove irrelevant variables from the model. This improves the model for future predictions. For example, data shall be better prepared to include the state variable since the population of each state differs and mis-weighing the voting power of a state can drastically alter our prediction.
+
+## Appendix
+GitHub Link: https://github.com/chauanh11/2020-US-Election
+
+## References
+1. (2018) An Examination of the 2016 Electorate, Based on Validated Voters. Pew Research Center - U.S. Politics & Policy, Pew Research Center, 9 Aug. 2018, www.pewresearch.org/politics/2018/08/09/an-examination-of-the-2016-electorate-based-on-validated-voters/.
+2. Chris Tausanovitch and Lynn Vavreck (September 2020). Nationscape Data Set. Democracy Fund: Voters Study Group + UCLA Nationscape, version 20200814, September 2020. https://www.voterstudygroup.org/publication/nationscape-data-set
+3. Steven Ruggles, Sarah Flood, Ronald Goeken, Josiah Grover, Erin Meyer, Jose Pacas and Matthew Sobek. IPUMS USA: Version 10.0 [dataset]. Minneapolis, MN: IPUMS, 2020. https://doi.org/10.18128/D010.V10.0
+
+
